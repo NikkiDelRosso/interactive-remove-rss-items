@@ -14,66 +14,82 @@ def parseArgs():
     parser.add_argument('--verbose', dest='verbose', action='store_const',
                         const=True, default=False,
                         help='Verbose output')
+    parser.add_argument('--force-overwrite', dest='force_overwrite', action='store_const',
+                        const=True, default=False,
+                        help='Force overwriting the output file')
     return parser.parse_args()
 
-def printVerbose(text):
-    if (verbose):
-        print "verbose:", text
+class InteractiveRSSItemFilter:
+    def __init__(self, verbose = False):
+        self.itemsToRemove = []
+        self.verbose = verbose
 
-def keepOrRemove():
-    loop = True
-    while loop:
-        input_str = raw_input("  > y to keep, n to delete: ")
-        if re.match("^[yYnN]$", input_str):
-            loop = False
-            return input_str == 'Y' or input_str == 'y'
+    def run(self, infile, outfile):
+        tree = ET.parse(infile)
+        root = tree.getroot()
+        namespaces = self.registerNamespaces(tree, infile)
 
-def promptToKeepPost(parent, item):
-    print "\nTitle:", item.find("title").text
-    if keepOrRemove():
-        print "Keeping item\n"
-    else:
-        print "Flagging item for removal\n"
-        globalItemsToRemove.append((parent, item))
+        try:
+            self.traverse(root)
+        except KeyboardInterrupt:
+            print "\nInterrupted. Saving progress in output file."
 
-def traverse(elem):
-    i = 0
-    for child in elem:
-        if child.tag == "channel":
-            printVerbose("Found <channel> tag. Going one level deeper.")
-            traverse(child)
-        elif child.tag == "item":
-            i += 1
-            printVerbose("<item> #" + str(i))
-            promptToKeepPost(elem, child)
+        self.removeItems(self.itemsToRemove)
+        print "\nDone! Writing", outfile
+        tree.write(outfile, encoding="UTF-8", xml_declaration=True)
+
+    def registerNamespaces(self, infile):
+        for (prefix, uri) in [ node for _, node in ET.iterparse(infile, events=['start-ns']) ]:
+            ET.register_namespace(prefix, uri)
+
+    def printVerbose(self, text):
+        if (self.verbose):
+            print "verbose:", text
+
+    def keepOrRemove(self):
+        loop = True
+        while loop:
+            input_str = raw_input("  > y to keep, n to delete: ")
+            if re.match("^[yYnN]$", input_str):
+                loop = False
+                return input_str == 'Y' or input_str == 'y'
+
+    def promptToKeepPost(self, parent, item):
+        print "\nTitle:", item.find("title").text
+        if self.keepOrRemove():
+            print "Keeping item\n"
         else:
-            printVerbose("Found <" + child.tag + "> tag - keeping")
+            print "Flagging item for removal\n"
+            self.itemsToRemove.append((parent, item))
 
-def removeItems(itemsToRemove):
-    for (parent, child) in itemsToRemove:
-        parent.remove(child)
-        printVerbose("Removing <" + child.tag + "> with <title>" + child.find("title").text)
+    def traverse(self, elem):
+        i = 0
+        for child in elem:
+            if child.tag == "channel":
+                self.printVerbose("Found <channel> tag. Going one level deeper.")
+                self.traverse(child)
+            elif child.tag == "item":
+                i += 1
+                self.printVerbose("<item> #" + str(i))
+                self.promptToKeepPost(elem, child)
+            else:
+                self.printVerbose("Found <" + child.tag + "> tag - keeping")
+
+    def removeItems(self, itemsToRemove):
+        for (parent, child) in itemsToRemove:
+            parent.remove(child)
+            self.printVerbose("Removing <" + child.tag + " /> with <title>" + child.find("title").text + "</title>")
 
 
 if __name__ == '__main__':
-    globalItemsToRemove = []
     args = parseArgs()
-    infile=args.input_file[0]
+    infile = args.input_file[0]
     outfile = args.output_file[0]
+    verbose = args.verbose
 
-    if path.isfile(outfile):
+    if path.isfile(outfile) and not args.force_overwrite:
         print "Output file", outfile, "already exists. Specify a different filename."
         sys.exit(1)
 
-    tree = ET.parse(infile)
-    root = tree.getroot()
-    verbose = args.verbose
-
-    try:
-        traverse(root)
-    except KeyboardInterrupt:
-        print "\nInterrupted. Saving progress in output file."
-
-    removeItems(globalItemsToRemove)
-    print "\nDone! Writing", outfile
-    tree.write(outfile, encoding="UTF-8", xml_declaration=True)
+    driver = InteractiveRSSItemFilter(verbose)
+    driver.run(infile, outfile)
