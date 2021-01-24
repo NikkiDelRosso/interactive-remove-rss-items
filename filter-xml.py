@@ -27,7 +27,7 @@ class InteractiveRSSItemFilter:
     def run(self, infile, outfile):
         tree = ET.parse(infile)
         root = tree.getroot()
-        namespaces = self.registerNamespaces(tree, infile)
+        namespaces = self.registerNamespaces(infile)
 
         try:
             self.traverse(root)
@@ -40,6 +40,7 @@ class InteractiveRSSItemFilter:
 
     def registerNamespaces(self, infile):
         for (prefix, uri) in [ node for _, node in ET.iterparse(infile, events=['start-ns']) ]:
+            self.printVerbose("Registering namespace %s with uri %s" % (prefix, uri))
             ET.register_namespace(prefix, uri)
 
     def printVerbose(self, text):
