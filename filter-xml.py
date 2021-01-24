@@ -76,4 +76,4 @@ if __name__ == '__main__':
 
     removeItems(globalItemsToRemove)
     print "\nDone! Writing", outfile
-    tree.write(outfile)
+    tree.write(outfile, encoding="UTF-8", xml_declaration=True)
