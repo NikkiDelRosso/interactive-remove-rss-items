@@ -7,10 +7,13 @@ import sys
 
 def parseArgs():
     parser = argparse.ArgumentParser(description='Filter XML file.')
-    parser.add_argument('input_file', metavar='I', type=str, nargs=1,
+    parser.add_argument('input_file', metavar='I', type=str,
                         help='input xml file')
-    parser.add_argument('output_file', metavar='O', type=str, nargs=1,
+    parser.add_argument('output_file', metavar='O', type=str,
                         help='output xml file')
+    parser.add_argument('--keep-titles', dest='keep_titles_file', type=str,
+                        help='text list with titles to keep (one title per line)',
+                        default=None)
     parser.add_argument('--verbose', dest='verbose', action='store_const',
                         const=True, default=False,
                         help='Verbose output')
@@ -22,7 +25,16 @@ def parseArgs():
 class InteractiveRSSItemFilter:
     def __init__(self, verbose = False):
         self.itemsToRemove = []
+        self.keepTitles = []
         self.verbose = verbose
+
+    def readKeepTitles(self, filename):
+        self.printVerbose("Reading \"keep titles\" from %s" % filename)
+        with open(filename, 'r') as fd:
+            self.keepTitles = [line.rstrip('\n').strip().lower() for line in fd]
+
+    def inKeepTitles(self, title):
+        return title.strip().lower() in self.keepTitles
 
     def run(self, infile, outfile):
         tree = ET.parse(infile)
@@ -56,7 +68,10 @@ class InteractiveRSSItemFilter:
                 return input_str == 'Y' or input_str == 'y'
 
     def promptToKeepPost(self, parent, item):
-        print "\nTitle:", self.getTitle(item)
+        title = self.getTitle(item)
+        print "\nTitle:", title
+        if self.inKeepTitles(title):
+            print "** Matches title in keep list **"
         if self.keepOrRemove():
             print "Keeping item\n"
         else:
@@ -89,8 +104,9 @@ class InteractiveRSSItemFilter:
 
 if __name__ == '__main__':
     args = parseArgs()
-    infile = args.input_file[0]
-    outfile = args.output_file[0]
+    infile = args.input_file
+    outfile = args.output_file
+    keepTitlesFile = args.keep_titles_file
     verbose = args.verbose
 
     if path.isfile(outfile) and not args.force_overwrite:
@@ -98,4 +114,6 @@ if __name__ == '__main__':
         sys.exit(1)
 
     driver = InteractiveRSSItemFilter(verbose)
+    if keepTitlesFile:
+        driver.readKeepTitles(keepTitlesFile)
     driver.run(infile, outfile)
