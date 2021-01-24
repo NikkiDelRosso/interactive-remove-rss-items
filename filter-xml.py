@@ -56,7 +56,7 @@ class InteractiveRSSItemFilter:
                 return input_str == 'Y' or input_str == 'y'
 
     def promptToKeepPost(self, parent, item):
-        print "\nTitle:", item.find("title").text
+        print "\nTitle:", self.getTitle(item)
         if self.keepOrRemove():
             print "Keeping item\n"
         else:
@@ -79,8 +79,13 @@ class InteractiveRSSItemFilter:
     def removeItems(self, itemsToRemove):
         for (parent, child) in itemsToRemove:
             parent.remove(child)
-            self.printVerbose("Removing <" + child.tag + " /> with <title>" + child.find("title").text + "</title>")
+            self.printVerbose("Removing <" + child.tag + " /> with <title>" + self.getTitle(child) + "</title>")
 
+    def getTitle(self, item):
+        try:
+            return item.find("title").text.encode(sys.stdout.encoding, errors='replace')
+        except:
+            return "(unable to display title of post)"
 
 if __name__ == '__main__':
     args = parseArgs()
