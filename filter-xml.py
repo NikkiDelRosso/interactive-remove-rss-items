@@ -37,6 +37,8 @@ def parseArgs():
     parser.add_argument('--fuzzy', dest='use_fuzzy', action='store_const',
                          const=True, default=False,
                          help='Use fuzzy string matching for keep titles detection. Requires fuzzywuzzy to be installed.')
+    parser.add_argument('--fuzzy-ratio', dest='fuzzy_ratio', type=int, default=85,
+                         help='The minimum ratio to alert for fuzzy matches')
     return parser.parse_args()
 
 class InteractiveRSSItemFilter:
@@ -51,24 +53,28 @@ class InteractiveRSSItemFilter:
         self.printVerbose("Reading \"keep titles\" from %s" % filename)
         with open(filename, 'r') as fd:
             self.keepTitles = [line.rstrip('\n').strip() for line in fd]
-            self.keepTitlesLower = [title.lower() for title in self.keepTitles]
+            self.keepTitlesProcessed = [self.processTitle(title) for title in self.keepTitles]
 
-    def useFuzzy(self):
+    def processTitle(self, title):
+        return title.lower()
+
+    def useFuzzy(self, ratio = 85):
         try:
-            from fuzzywuzzy import fuzz
-            self.fuzz = fuzz
+            from fuzzywuzzy import process
+            self.fuzzyProcess = process
             self.fuzzyEnabled = True
+            self.fuzzyRatio = 85
         except:
             print(Fore.RED + "Unable to uze fuzzy matching. Install fuzzywuzzy with `pip install fuzzywuzzy`" + Style.RESET_ALL)
 
     def checkKeepTitles(self, title):
         if self.fuzzyEnabled:
-            for keepTitle in self.keepTitles:
-                ratio = self.fuzz.ratio(title.strip(), keepTitle)
-                if ratio >= 85:
-                    print(Fore.GREEN + "** %d%% match with keep title: %s" % (ratio, keepTitle) + Style.RESET_ALL)
+            (closestKeepTitle, ratio) = self.fuzzyProcess.extractOne(title, self.keepTitles)
+            if ratio >= self.fuzzyRatio:
+                color = Fore.GREEN if ratio >= 95 else Fore.YELLOW
+                print(color + "** %d%% match with keep title: %s" % (ratio, closestKeepTitle) + Style.RESET_ALL)
         else:
-            if title.strip().lower() in self.keepTitlesLower:
+            if self.processTitle(title) in self.keepTitlesProcessed:
                 print(Fore.GREEN + "** Matches title in keep titles **" + Style.RESET_ALL)
 
     def run(self, infile, outfile):
@@ -79,10 +85,10 @@ class InteractiveRSSItemFilter:
         try:
             self.traverse(root)
         except KeyboardInterrupt:
-            print("\nInterrupted. Saving progress in output file.")
+            print(Style.RESET_ALL + Fore.YELLOW + "\n\nInterrupted. Saving progress in output file.\n" + Style.RESET_ALL)
 
         self.removeItems(self.itemsToRemove)
-        print("\nDone! Writing", outfile)
+        print((Fore.GREEN + "\nDone! Writing " + Style.BRIGHT + "%s" + Style.RESET_ALL) % outfile)
         tree.write(outfile, encoding="UTF-8", xml_declaration=True)
 
     def registerNamespaces(self, infile):
@@ -97,14 +103,18 @@ class InteractiveRSSItemFilter:
     def keepOrRemove(self):
         loop = True
         while loop:
-            input_str = input(Fore.CYAN + "  > y to keep, n to delete: " + Style.RESET_ALL)
+            input_str = input(Style.RESET_ALL + Fore.CYAN + "  > y to keep, n to delete: " + Fore.YELLOW + Style.BRIGHT)
             if re.match("^[yYnN]$", input_str):
+                print(Style.RESET_ALL)
                 loop = False
                 return input_str == 'Y' or input_str == 'y'
 
     def promptToKeepPost(self, parent, item):
         title = self.getTitle(item)
-        print("\nTitle: %s" % title)
+        try:
+            print("\nTitle: %s" % title)
+        except:
+            print(Fore.YELLOW + "\nUnable to display post title" + Style.RESET_ALL)
         self.checkKeepTitles(title)
         if self.keepOrRemove():
             print(Fore.GREEN + "Keeping item\n" + Style.RESET_ALL)
@@ -128,13 +138,14 @@ class InteractiveRSSItemFilter:
     def removeItems(self, itemsToRemove):
         for (parent, child) in itemsToRemove:
             parent.remove(child)
-            self.printVerbose("Removing <%s /> with <title>%s</title>" % (child.tag, self.getTitle(child)))
+            try:
+                self.printVerbose("Removing <%s /> with <title>%s</title>" % (child.tag, self.getTitle(child)))
+            except:
+                self.printVerbose(("Removing <%s />" % child.tag) + Fore.YELLOW + " (unable to display title)" + Style.RESET_ALL)
+
 
     def getTitle(self, item):
-        try:
-            return item.find("title").text.encode(sys.stdout.encoding, errors='replace')
-        except:
-            return "(unable to display title of post)"
+        return item.find("title").text
 
 if __name__ == '__main__':
     args = parseArgs()
@@ -147,5 +158,5 @@ if __name__ == '__main__':
     if args.keep_titles_file:
         driver.readKeepTitles(args.keep_titles_file)
     if args.use_fuzzy:
-        driver.useFuzzy()
+        driver.useFuzzy(args.fuzzy_ratio)
     driver.run(args.input_file, args.output_file)
