@@ -56,7 +56,9 @@ class InteractiveRSSItemFilter:
             self.keepTitlesProcessed = [self.processTitle(title) for title in self.keepTitles]
 
     def processTitle(self, title):
-        return title.lower()
+        processed = re.sub(r'\W+', '', title.lower())
+        self.printVerbose("Processing title: %s -> %s" % (title, processed))
+        return processed
 
     def useFuzzy(self, ratio = 85):
         try:
@@ -105,7 +107,7 @@ class InteractiveRSSItemFilter:
         while loop:
             input_str = input(Style.RESET_ALL + Fore.CYAN + "  > y to keep, n to delete: " + Fore.YELLOW + Style.BRIGHT)
             if re.match("^[yYnN]$", input_str):
-                print(Style.RESET_ALL)
+                print(Style.RESET_ALL, end='')
                 loop = False
                 return input_str == 'Y' or input_str == 'y'
 
