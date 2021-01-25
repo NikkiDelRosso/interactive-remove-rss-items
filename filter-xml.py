@@ -20,7 +20,7 @@ except:
 
 
 def parseArgs():
-    parser = argparse.ArgumentParser(description='Filter XML file.')
+    parser = argparse.ArgumentParser(description='Displays the title of each item within an RSS feed, and prompt the user to keep or remove the item from the feed. A new RSS feed file is output excluding the removed items.')
     parser.add_argument('input_file', metavar='INPUT_FILE', type=str,
                         help='input xml file')
     parser.add_argument('output_file', metavar='OUTPUT_FILE', type=str,
